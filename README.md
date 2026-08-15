@@ -1,5 +1,7 @@
 # mini-LLM-infra
 
+**English** | [简体中文](./README.zh-CN.md)
+
 > Building a small but complete LLM inference stack from scratch — from naive PyTorch inference to profiling, optimization, concurrent serving, and production-oriented experiments.
 
 ## Overview
