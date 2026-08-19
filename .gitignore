@@ -26,4 +26,5 @@ dist/
 Thumbs.db
 
 # local models
-models/
+models/*
+!models/.gitkeep
