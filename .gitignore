@@ -28,3 +28,13 @@ Thumbs.db
 # local models
 models/*
 !models/.gitkeep
+
+# Large profiler artifacts
+experiments/**/profile/
+experiments/**/profiles/
+*.pt.trace.json
+*.pt.trace.json.gz
+*.stacks
+
+# Raw benchmark outputs
+experiments/**/results/raw/
