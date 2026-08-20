@@ -64,7 +64,7 @@ model_path = Path("/workspace/mini-LLM-Infra/models/Qwen3-1.7B")
 在仓库根目录执行：
 
 ```bash
-uv run python experiments/00_baseline/first-load.py
+uv run python experiments/00_first_load_and_infra/first-load.py
 ```
 
 ## 输出
@@ -72,7 +72,7 @@ uv run python experiments/00_baseline/first-load.py
 模型结构会保存到：
 
 ```text
-experiments/00_baseline/qwen3-1.7b-structure.txt
+experiments/00_first_load_and_infra/qwen3-1.7b-structure.txt
 ```
 
 该文件包含：

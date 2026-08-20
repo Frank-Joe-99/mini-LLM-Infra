@@ -1,0 +1,142 @@
+{
+  "version": 1,
+  "defaults": {
+    "warmup_runs": 1,
+    "benchmark_runs": 5,
+    "use_cache": true,
+    "force_exact_output_length": true,
+    "profile_new_tokens": 16
+  },
+  "suites": {
+    "smoke": {
+      "prompt_ids": [
+        "short_kv_cache"
+      ],
+      "max_new_tokens": 32,
+      "force_exact_output_length": false
+    },
+    "prefill": {
+      "prompt_ids": [
+        "long_attention",
+        "long_profiler",
+        "xlong_architecture",
+        "xlong_concurrency"
+      ],
+      "max_new_tokens": 1,
+      "force_exact_output_length": false
+    },
+    "decode": {
+      "prompt_ids": [
+        "short_kv_cache",
+        "short_prefill_decode",
+        "short_attention"
+      ],
+      "max_new_tokens": 512,
+      "force_exact_output_length": true
+    },
+    "mixed": {
+      "prompt_ids": [
+        "medium_generation",
+        "medium_scheduler",
+        "medium_cache",
+        "long_attention",
+        "long_serving"
+      ],
+      "max_new_tokens": 512,
+      "force_exact_output_length": true
+    },
+    "full": {
+      "prompt_ids": [
+        "*"
+      ],
+      "max_new_tokens": 512,
+      "force_exact_output_length": true
+    }
+  },
+  "prompts": [
+    {
+      "id": "short_kv_cache",
+      "length_group": "short",
+      "prompt": "请解释什么是 KV Cache。",
+      "context": "",
+      "context_repeat": 0
+    },
+    {
+      "id": "short_prefill_decode",
+      "length_group": "short",
+      "prompt": "Prefill 和 Decode 阶段有什么区别？",
+      "context": "",
+      "context_repeat": 0
+    },
+    {
+      "id": "short_attention",
+      "length_group": "short",
+      "prompt": "请介绍自注意力的计算过程。",
+      "context": "",
+      "context_repeat": 0
+    },
+    {
+      "id": "medium_generation",
+      "length_group": "medium",
+      "prompt": "根据下面的背景资料，说明语言模型生成一个 token 的完整过程。",
+      "context": "自回归语言模型根据已有 token 计算隐藏状态、注意力、logits，并从候选 token 中选择下一个 token。",
+      "context_repeat": 2
+    },
+    {
+      "id": "medium_scheduler",
+      "length_group": "medium",
+      "prompt": "根据背景资料设计一个简单的推理请求调度器。",
+      "context": "推理服务器需要管理等待队列、活动请求、Prefill 请求、Decode 请求、请求完成状态以及显存使用情况。",
+      "context_repeat": 4
+    },
+    {
+      "id": "medium_cache",
+      "length_group": "medium",
+      "prompt": "分析下面场景中的 KV Cache 显存增长情况。",
+      "context": "多个用户同时提交不同长度的 Prompt，每个请求继续生成不同数量的输出 token，KV Cache 会随着序列长度持续增长。",
+      "context_repeat": 6
+    },
+    {
+      "id": "long_attention",
+      "length_group": "long",
+      "prompt": "阅读以下背景资料，对比 Prefill 和 Decode 阶段 Attention 的计算特征。",
+      "context": "Prefill 阶段会并行处理多个输入 token，具有较大的矩阵运算；Decode 阶段每次通常只处理一个新 token，但需要读取已有 KV Cache。",
+      "context_repeat": 8
+    },
+    {
+      "id": "long_profiler",
+      "length_group": "long",
+      "prompt": "阅读下面的性能记录背景，给出 PyTorch Profiler 分析方案。",
+      "context": "性能分析需要关注 CPU Kernel launch、CUDA Kernel、同步开销、矩阵乘法、显存分配、输入形状和算子调用次数。",
+      "context_repeat": 12
+    },
+    {
+      "id": "long_serving",
+      "length_group": "long",
+      "prompt": "根据以下背景资料设计一个在线 LLM 推理服务。",
+      "context": "在线服务需要处理异步请求、连续批处理、请求取消、超时、背压、队列限制、流式输出和 GPU OOM。",
+      "context_repeat": 16
+    },
+    {
+      "id": "xlong_architecture",
+      "length_group": "xlong",
+      "prompt": "阅读以下系统背景，给出完整的 LLM 推理 Runtime 架构设计。",
+      "context": "推理 Runtime 由模型执行器、Tokenizer、请求队列、调度器、Batch 管理器、KV Cache 管理器和指标收集模块组成。",
+      "context_repeat": 24
+    },
+    {
+      "id": "xlong_concurrency",
+      "length_group": "xlong",
+      "prompt": "分析下面的多用户并发推理场景，并提出优化方案。",
+      "context": "请求具有不同的到达时间、Prompt 长度和输出长度。长请求可能阻塞短请求，Prefill 可能干扰 Decode，并导致 TTFT 和 P99 延迟上升。",
+      "context_repeat": 32
+    },
+    {
+      "id": "xlong_engine_comparison",
+      "length_group": "xlong",
+      "prompt": "根据背景资料设计 Hugging Face、mini runtime、vLLM 和 SGLang 的公平对比实验。",
+      "context": "公平对比需要固定模型、GPU、dtype、输入长度、输出长度、采样参数、并发数、预热次数和测量次数，并保存原始结果。",
+      "context_repeat": 48
+    }
+  ]
+}
