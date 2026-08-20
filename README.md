@@ -45,14 +45,15 @@ This project aims to answer questions such as:
 
 ## Model
 
-The main experiments will use a small decoder-only LLM around the **1–2B parameter scale**.
+The primary model is currently **Qwen3-1.7B**, a decoder-only LLM in the
+1–2B parameter range.
 
 The same primary model should be used across most experiments so that performance changes mainly come from infrastructure modifications rather than model differences.
 
-Example candidates:
-
-* Qwen3-1.7B
-* other comparable decoder-only models
+Model weights are stored locally under `models/` and are intentionally excluded
+from version control. Most scripts default to
+`/workspace/mini-LLM-Infra/models/Qwen3-1.7B`; use `--model-path` when the
+checkpoint is stored elsewhere.
 
 ---
 
@@ -75,19 +76,62 @@ The project intentionally starts from single-GPU inference because most fundamen
 
 ## Software Stack
 
-Main tools may include:
+The current baseline environment uses:
 
-* Python
+* Python 3.12
+* uv
 * PyTorch
 * Hugging Face Transformers
+* Accelerate
 * Triton
-* CUDA
+* NVIDIA CUDA
+* NumPy
+* pytest
+
+Later stages may also use:
+
 * PyTorch Profiler
 * NVIDIA Nsight Systems
 * NVIDIA Nsight Compute
 * FastAPI / HTTP serving tools
 * vLLM
 * SGLang
+
+---
+
+# Quick Start
+
+Synchronize the Python environment from the repository root:
+
+```bash
+uv sync
+```
+
+Check that PyTorch can access the GPU:
+
+```bash
+uv run python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))"
+```
+
+Run the shortest Hugging Face baseline smoke test:
+
+```bash
+uv run python experiments/01_default_infer_baseline/benchmark_hf_generate.py \
+  --suite smoke \
+  --no-profile
+```
+
+If the model is not in the default location, add:
+
+```bash
+--model-path /path/to/Qwen3-1.7B
+```
+
+See the experiment documentation for details:
+
+* [First model load and structure export](./experiments/00_first_load_and_infra/README.md)
+* [Hugging Face generation benchmark](./experiments/01_default_infer_baseline/README-benchmark-hf-generate.md)
+* [Benchmark workload configuration](./experiments/01_default_infer_baseline/README-benchmark-config.md)
 
 ---
 
@@ -131,15 +175,16 @@ The production engines are used as **references and comparison targets**, rather
 
 Goal: establish a simple and reliable inference baseline.
 
-* [ ] Create reproducible Python environment
-* [ ] Load tokenizer and model
-* [ ] Run single-request text generation
-* [ ] Fix random seeds where applicable
-* [ ] Record software/hardware environment
-* [ ] Record model loading time
-* [ ] Measure GPU memory usage
-* [ ] Build a basic benchmark script
-* [ ] Verify generated outputs
+* [x] Create a reproducible Python environment with uv
+* [x] Load the Qwen3-1.7B tokenizer and model from local files
+* [x] Run single-request greedy text generation
+* [x] Fix random seeds in the benchmark path
+* [x] Record the software and hardware environment
+* [x] Record tokenizer and model loading time
+* [x] Measure peak allocated and reserved GPU memory
+* [x] Build configurable smoke, prefill, decode, mixed, and full benchmark suites
+* [x] Save raw measurements and generated outputs
+* [x] Export PyTorch Profiler traces and operator tables
 
 Initial baseline:
 
@@ -158,16 +203,23 @@ Generated Tokens
 ### Deliverable
 
 ```text
-experiments/00_baseline/
+experiments/
+├── 00_first_load_and_infra/
+└── 01_default_infer_baseline/
 ```
 
 with:
 
-* runnable inference script
-* environment information
-* latency measurements
-* GPU memory measurements
-* short experiment report
+* a runnable first-load and generation script
+* a saved Qwen3-1.7B module structure
+* a configurable Hugging Face `model.generate()` benchmark
+* environment, loading-time, latency, throughput, and GPU-memory collection
+* JSON and text result reports
+* optional PyTorch Profiler traces
+
+The baseline tooling is implemented. Reproducible benchmark runs and analyzed
+result reports are the next evidence-gathering step; no performance conclusion
+should be drawn until those measurements are recorded and compared.
 
 ---
 
@@ -771,75 +823,39 @@ Possible future topics:
 
 # Repository Structure
 
-A possible repository layout:
+The repository currently contains the Phase 0 environment and baseline
+experiments. Later directories will be added only when their corresponding
+development phase begins.
 
 ```text
 mini-LLM-infra/
-│
+├── AGENTS.md
 ├── README.md
+├── README.zh-CN.md
 ├── LICENSE
 ├── pyproject.toml
-├── requirements.txt
-│
-├── configs/
-│   ├── model/
-│   └── benchmark/
-│
+├── uv.lock
+├── models/
+│   └── .gitkeep                 # local model weights are ignored
 ├── src/
-│   └── mini_llm/
-│       ├── model/
-│       ├── generation/
-│       ├── cache/
-│       ├── scheduler/
-│       ├── runtime/
-│       └── utils/
-│
-├── kernels/
-│   ├── rmsnorm/
-│   ├── rope/
-│   ├── softmax/
-│   ├── swiglu/
-│   └── attention/
-│
-├── serving/
-│   ├── server.py
-│   ├── scheduler.py
-│   └── api/
-│
-├── benchmarks/
-│   ├── latency/
-│   ├── throughput/
-│   ├── concurrency/
-│   └── engines/
-│
+│   └── mini_llm_infra/
+│       └── __init__.py
 ├── experiments/
-│   ├── 00_baseline/
-│   ├── 01_decode/
-│   ├── 02_kv_cache/
-│   ├── 03_profiling/
-│   ├── 04_kernels/
-│   ├── 05_batching/
-│   ├── 06_scheduler/
-│   └── 07_serving/
-│
-├── profiles/
-│
-├── results/
-│   ├── raw/
-│   ├── figures/
-│   └── reports/
-│
-├── scripts/
-│
-├── tests/
-│
-└── docs/
-    ├── architecture/
-    ├── inference/
-    ├── profiling/
-    ├── optimization/
-    └── notes/
+│   ├── 00_first_load_and_infra/
+│   │   ├── README.md
+│   │   ├── first-load.py
+│   │   └── qwen3-1.7b-structure.txt
+│   └── 01_default_infer_baseline/
+│       ├── README-benchmark-config.md
+│       ├── README-benchmark-hf-generate.md
+│       ├── benchmark_config.json
+│       └── benchmark_hf_generate.py
 ```
+
+Generated benchmark `results/` and profiler `profiles/` directories live under
+the relevant experiment. Shared `benchmarks/`, `docs/`, `profiles/`, and
+`results/` directories, plus `tests/`, will be introduced when reusable
+infrastructure and correctness coverage appear.
 
 ---
 
@@ -1008,13 +1024,22 @@ The emphasis is on:
 
 🚧 Work in progress.
 
+Completed baseline infrastructure:
+
+* [x] Python 3.12 and uv environment with CUDA-enabled PyTorch
+* [x] Local Qwen3-1.7B loading and model-structure export
+* [x] Single-request greedy generation
+* [x] Config-driven Hugging Face `generate()` benchmark suites
+* [x] Warm-up, synchronized timing, latency distribution, throughput, and GPU-memory collection
+* [x] JSON/text result output and optional PyTorch Profiler export
+
 Current focus:
 
-* [ ] Baseline inference
-* [ ] Benchmark infrastructure
-* [ ] Manual autoregressive decoding
-* [ ] Prefill / Decode analysis
-* [ ] KV Cache
+* [ ] Run and archive reproducible baseline measurements on the target GPU
+* [ ] Review generated outputs and write the first benchmark analysis
+* [ ] Add correctness tests for configuration and metric helpers
+* [ ] Begin manual autoregressive decoding
+* [ ] Separate strict Prefill, TTFT, Decode, TPOT, and ITL measurements
 
 ---
 
