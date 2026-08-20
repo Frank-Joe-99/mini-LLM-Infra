@@ -164,20 +164,16 @@ def configure_cuda_compatibility() -> tuple[int, int]:
     capability = torch.cuda.get_device_capability()
     major, _ = capability
 
-    # PyTorch 2.13 可能将部分 bmm 调用路由到 Triton。当前官方 Triton
-    # 不支持 T4 的 sm_75，因此在 Compute Capability 低于 8.0 时回退到 ATen。
     if major < 8:
-        try:
-            import torch._native
-            from torch._native.registry import deregister_op_overrides
+        from torch._native.registry import deregister_op_overrides
 
-            deregister_op_overrides(disable_op_symbols="bmm")
-            print("Disabled PyTorch native Triton bmm override for this GPU.")
-        except (ImportError, AttributeError) as exc:
-            print(
-                f"Warning: 无法禁用 Triton bmm override（{exc}），"
-                "低 Compute Capability 下性能可能受影响。"
-            )
+        deregister_op_overrides(
+            disable_op_symbols="bmm"
+        )
+        print(
+            "Disabled PyTorch native Triton bmm "
+            "override for this GPU."
+        )
 
     return capability
 
