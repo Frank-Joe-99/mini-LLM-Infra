@@ -18,7 +18,12 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_CONFIG_PATH = SCRIPT_DIR / "benchmark_config.json"
-DEFAULT_MODEL_PATH = Path("/workspace/mini-LLM-Infra/models/Qwen3-1.7B")
+
+project_root = Path(__file__).resolve().parents[2]
+DEFAULT_MODEL_PATH = project_root / "models" / "Qwen3-1.7B"
+
+if not DEFAULT_MODEL_PATH.exists():
+    raise FileNotFoundError(f"模型目录不存在：{DEFAULT_MODEL_PATH}")
 
 
 def parse_args() -> argparse.Namespace:

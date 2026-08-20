@@ -83,7 +83,11 @@ def save_model_structure(model_path: Path) -> Path:
 
     return output_path
 
-model_path = Path("/workspace/mini-LLM-Infra/models/Qwen3-1.7B")
+project_root = Path(__file__).resolve().parents[2]
+model_path = project_root / "models" / "Qwen3-1.7B"
+
+if not model_path.exists():
+    raise FileNotFoundError(f"模型目录不存在：{model_path}")
 
 save_model_structure(model_path)
 
