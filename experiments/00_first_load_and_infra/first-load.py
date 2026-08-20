@@ -4,16 +4,8 @@ import torch
 from accelerate import init_empty_weights
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
-# 在 T4 上禁用 PyTorch 2.13 新增的 bmm Triton override，让它回退到传统 ATen/CUDA 实现。
-if torch.cuda.is_available():
-    major, _ = torch.cuda.get_device_capability()
-
-    if major < 8:
-        import torch._native
-        from torch._native.registry import deregister_op_overrides
-
-        deregister_op_overrides(disable_op_symbols="bmm")
-
+from mini_llm_infra.utils.cuda import (configure_cuda_compatibility, )
+from mini_llm_infra.model.loader import (load_tokenizer, load_causal_lm)
 
 # 用 Accelerate 的 init_empty_weights() 在 meta device 上构造模型结构，
 # 不读取真实权重，然后把结构保存到脚本所在的 experiments/00_baseline/ 目录。
@@ -83,44 +75,55 @@ def save_model_structure(model_path: Path) -> Path:
 
     return output_path
 
-project_root = Path(__file__).resolve().parents[2]
-model_path = project_root / "models" / "Qwen3-1.7B"
+def main() -> None:
+    configure_cuda_compatibility()
 
-if not model_path.exists():
-    raise FileNotFoundError(f"模型目录不存在：{model_path}")
+    project_root = Path(__file__).resolve().parents[2]
+    model_path = project_root / "models" / "Qwen3-1.7B"
 
-save_model_structure(model_path)
+    save_model_structure(model_path=model_path)
 
-tokenizer = AutoTokenizer.from_pretrained(
-    model_path,
-    local_files_only=True,
-)
-
-model = AutoModelForCausalLM.from_pretrained(
-    model_path,
-    dtype=torch.float16,
-    local_files_only=True,
-).to("cuda").eval()
-
-messages = [
-    {"role": "user", "content": "请简要解释什么是 KV Cache。"},
-]
-
-inputs = tokenizer.apply_chat_template(
-    messages,
-    tokenize=True,
-    add_generation_prompt=True,
-    enable_thinking=False,
-    return_dict=True,
-    return_tensors="pt",
-).to(model.device)
-
-with torch.inference_mode():
-    outputs = model.generate(
-        **inputs,
-        max_new_tokens=12800,
-        do_sample=False,
+    tokenizer = load_tokenizer(
+        model_path, local_files_only=True
+    )
+    model = load_causal_lm(
+        model_path,
+        device='cuda',
+        dtype=torch.float16,
+        attention_backend=None,
+        local_files_only=True,
     )
 
-generated_ids = outputs[0, inputs["input_ids"].shape[1]:]
-print(tokenizer.decode(generated_ids, skip_special_tokens=True))
+    messages = [
+        {"role": "user", "content": "请详细解释什么是 KV Cache。"},
+    ]
+
+    inputs = tokenizer.apply_chat_template(
+        messages,
+        tokenize=True,
+        add_generation_prompt=True,
+        enable_thinking=False,
+        return_dict=True,
+        return_tensors="pt",
+    ).to(model.device)
+
+    with torch.inference_mode():
+        outputs = model.generate(
+            **inputs,
+            max_new_tokens=2048,
+            do_sample=False,
+        )
+
+    input_seq_len = inputs["input_ids"].shape[1]
+    generated_ids = outputs[0, input_seq_len:]
+
+    generated_text = tokenizer.decode(
+        generated_ids,
+        skip_special_tokens=True,
+    )
+
+    print(generated_text)
+
+
+if __name__ == "__main__":
+    main()

@@ -16,14 +16,16 @@ from torch.profiler import ProfilerActivity, profile, record_function
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
+from mini_llm_infra.model.loader import (load_causal_lm, load_tokenizer)
+from mini_llm_infra.utils.cuda import (configure_cuda_compatibility, select_dtype)
+
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_CONFIG_PATH = SCRIPT_DIR / "benchmark_config.json"
 
 project_root = Path(__file__).resolve().parents[2]
 DEFAULT_MODEL_PATH = project_root / "models" / "Qwen3-1.7B"
 
-if not DEFAULT_MODEL_PATH.exists():
-    raise FileNotFoundError(f"模型目录不存在：{DEFAULT_MODEL_PATH}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -162,38 +164,38 @@ def build_prompt_text(prompt_case: dict[str, Any]) -> str:
     return "\n\n".join(sections)
 
 
-def configure_cuda_compatibility() -> tuple[int, int]:
-    if not torch.cuda.is_available():
-        raise RuntimeError("没有检测到可用的 CUDA GPU。")
+# def configure_cuda_compatibility() -> tuple[int, int]:
+#     if not torch.cuda.is_available():
+#         raise RuntimeError("没有检测到可用的 CUDA GPU。")
 
-    capability = torch.cuda.get_device_capability()
-    major, _ = capability
+#     capability = torch.cuda.get_device_capability()
+#     major, _ = capability
 
-    if major < 8:
-        from torch._native.registry import deregister_op_overrides
+#     if major < 8:
+#         from torch._native.registry import deregister_op_overrides
 
-        deregister_op_overrides(
-            disable_op_symbols="bmm"
-        )
-        print(
-            "Disabled PyTorch native Triton bmm "
-            "override for this GPU."
-        )
+#         deregister_op_overrides(
+#             disable_op_symbols="bmm"
+#         )
+#         print(
+#             "Disabled PyTorch native Triton bmm "
+#             "override for this GPU."
+#         )
 
-    return capability
+#     return capability
 
 
-def select_dtype(dtype_name: str) -> torch.dtype:
-    if dtype_name == "float16":
-        return torch.float16
+# def select_dtype(dtype_name: str) -> torch.dtype:
+#     if dtype_name == "float16":
+#         return torch.float16
 
-    native_bf16 = torch.cuda.is_bf16_supported(including_emulation=False)
-    if not native_bf16:
-        print(
-            "Warning: 当前 GPU 没有原生 BF16 支持，"
-            "BF16 可能回退或无法用于部分编译 Kernel。"
-        )
-    return torch.bfloat16
+#     native_bf16 = torch.cuda.is_bf16_supported(including_emulation=False)
+#     if not native_bf16:
+#         print(
+#             "Warning: 当前 GPU 没有原生 BF16 支持，"
+#             "BF16 可能回退或无法用于部分编译 Kernel。"
+#         )
+#     return torch.bfloat16
 
 
 def prepare_inputs(
@@ -569,19 +571,21 @@ def main() -> None:
     device = torch.device("cuda")
 
     tokenizer_started_at = time.perf_counter()
-    tokenizer = AutoTokenizer.from_pretrained(
+
+    tokenizer = load_tokenizer(
         args.model_path,
-        local_files_only=True,
+        local_files_only=True
     )
     tokenizer_load_seconds = time.perf_counter() - tokenizer_started_at
 
     model_started_at = time.perf_counter()
-    model = AutoModelForCausalLM.from_pretrained(
+    model = load_causal_lm(
         args.model_path,
+        device=device,
         dtype=dtype,
-        attn_implementation=args.attention_backend,
-        local_files_only=True,
-    ).to(device).eval()
+        attention_backend=args.attention_backend,
+        local_files_only=True
+    )
     torch.cuda.synchronize()
     model_load_seconds = time.perf_counter() - model_started_at
 

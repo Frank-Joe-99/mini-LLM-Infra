@@ -1,4 +1,4 @@
-Model path: /workspace/mini-LLM-Infra/models/Qwen3-1.7B
+Model path: /mnt/f/OpenAI_triton/mini-LLM-Infra/models/Qwen3-1.7B
 Model type: qwen3
 Model class: Qwen3ForCausalLM
 Total parameters: 1,720,574,976
