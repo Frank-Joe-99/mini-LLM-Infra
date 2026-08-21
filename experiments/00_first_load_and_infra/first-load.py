@@ -16,7 +16,6 @@ def main() -> None:
     project_root = Path(__file__).resolve().parents[2]
     model_path = project_root / "models" / "Qwen3-1.7B"
 
-
     #save_model_structure(model_path=model_path)
 
     tokenizer = load_tokenizer(
