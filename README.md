@@ -80,12 +80,13 @@ The current baseline environment uses:
 
 * Python 3.12
 * uv
-* PyTorch
-* Hugging Face Transformers
+* PyTorch (CUDA 13.0)
+* Hugging Face Transformers / Hub
 * Accelerate
 * Triton
 * NVIDIA CUDA
 * NumPy
+* matplotlib
 * pytest
 
 Later stages may also use:
@@ -127,11 +128,32 @@ If the model is not in the default location, add:
 --model-path /path/to/Qwen3-1.7B
 ```
 
+Run the Phase 1 manual autoregressive decoding smoke test:
+
+```bash
+uv run python experiments/02_autoregressive_decoding/benchmark_manual_decode.py \
+  --suite smoke
+```
+
+Compare decode with and without KV Cache:
+
+```bash
+# with KV Cache (default)
+uv run python experiments/02_autoregressive_decoding/benchmark_manual_decode.py \
+  --suite decode
+
+# without KV Cache — observe how much slower each step is
+uv run python experiments/02_autoregressive_decoding/benchmark_manual_decode.py \
+  --suite decode \
+  --no-use-cache
+```
+
 See the experiment documentation for details:
 
 * [First model load and structure export](./experiments/00_first_load_and_infra/README.md)
 * [Hugging Face generation benchmark](./experiments/01_default_infer_baseline/README-benchmark-hf-generate.md)
 * [Benchmark workload configuration](./experiments/01_default_infer_baseline/README-benchmark-config.md)
+* [Manual autoregressive decoding (Phase 1)](./experiments/02_autoregressive_decoding/README.md)
 
 ---
 
@@ -251,16 +273,16 @@ token
 
 Tasks:
 
-* [ ] Implement manual autoregressive decoding
-* [ ] Understand logits generation
-* [ ] Implement greedy decoding
+* [x] Implement manual autoregressive decoding
+* [x] Understand logits generation
+* [x] Implement greedy decoding
 * [ ] Implement temperature sampling
 * [ ] Implement Top-K sampling
 * [ ] Implement Top-P sampling
-* [ ] Separate prefill and decode
-* [ ] Measure prefill latency
-* [ ] Measure decode latency
-* [ ] Measure per-token latency
+* [x] Separate prefill and decode
+* [x] Measure prefill latency
+* [x] Measure decode latency
+* [x] Measure per-token latency
 
 Important metrics:
 
@@ -282,11 +304,11 @@ Goal: understand the first major optimization in autoregressive inference.
 
 Experiments:
 
-* [ ] Decode without KV Cache
-* [ ] Decode with KV Cache
-* [ ] Compare computation
-* [ ] Compare latency
-* [ ] Compare GPU memory consumption
+* [x] Decode without KV Cache
+* [x] Decode with KV Cache
+* [x] Compare computation
+* [x] Compare latency
+* [x] Compare GPU memory consumption
 * [ ] Analyze KV Cache growth with sequence length
 * [ ] Analyze KV Cache layout
 * [ ] Study MHA / GQA / MQA differences
@@ -823,7 +845,7 @@ Possible future topics:
 
 # Repository Structure
 
-The repository currently contains the Phase 0 environment and baseline
+The repository currently contains Phase 0 and Phase 1 environments and
 experiments. Later directories will be added only when their corresponding
 development phase begins.
 
@@ -839,17 +861,31 @@ mini-LLM-infra/
 │   └── .gitkeep                 # local model weights are ignored
 ├── src/
 │   └── mini_llm_infra/
-│       └── __init__.py
-├── experiments/
-│   ├── 00_first_load_and_infra/
-│   │   ├── README.md
-│   │   ├── first-load.py
-│   │   └── qwen3-1.7b-structure.txt
-│   └── 01_default_infer_baseline/
-│       ├── README-benchmark-config.md
-│       ├── README-benchmark-hf-generate.md
-│       ├── benchmark_config.json
-│       └── benchmark_hf_generate.py
+│       ├── __init__.py
+│       ├── generation/
+│       │   └── manual.py        # ManualGenerateConfig / GenerationMetrics / manual_generate()
+│       ├── model/
+│       │   └── loader.py        # load_tokenizer / load_causal_lm
+│       └── utils/
+│           ├── cuda.py          # configure_cuda_compatibility / select_dtype
+│           └── loadconfig.py    # benchmark config parsing and suite resolution
+├── tests/
+│   └── test_autoregressive.py   # correctness tests for manual decoding
+└── experiments/
+    ├── 00_first_load_and_infra/
+    │   ├── README.md
+    │   ├── first-load.py
+    │   └── qwen3-1.7b-structure.txt
+    ├── 01_default_infer_baseline/
+    │   ├── README-benchmark-config.md
+    │   ├── README-benchmark-hf-generate.md
+    │   ├── benchmark_config.json
+    │   └── benchmark_hf_generate.py
+    └── 02_autoregressive_decoding/
+        ├── README.md
+        ├── benchmark_config.json
+        ├── benchmark_manual_decode.py   # manual Greedy decode + TTFT/TPOT/ITL/TOT
+        └── compare_greedy_with_hf.py    # (placeholder) consistency check vs HF generate()
 ```
 
 Generated benchmark `results/` and profiler `profiles/` directories live under
@@ -1024,22 +1060,33 @@ The emphasis is on:
 
 🚧 Work in progress.
 
-Completed baseline infrastructure:
+**Phase 0 — Completed:**
 
-* [x] Python 3.12 and uv environment with CUDA-enabled PyTorch
+* [x] Python 3.12 and uv environment with CUDA-enabled PyTorch (CUDA 13.0)
 * [x] Local Qwen3-1.7B loading and model-structure export
 * [x] Single-request greedy generation
-* [x] Config-driven Hugging Face `generate()` benchmark suites
-* [x] Warm-up, synchronized timing, latency distribution, throughput, and GPU-memory collection
+* [x] Config-driven Hugging Face `generate()` benchmark suites (`smoke` / `prefill` / `decode` / `mixed` / `full`)
+* [x] Warm-up, synchronized CUDA timing, latency distribution (mean/P50/P95), throughput, and GPU-memory collection
 * [x] JSON/text result output and optional PyTorch Profiler export
+
+**Phase 1 — In Progress:**
+
+* [x] Manual autoregressive decoding loop (`manual_generate()` in `src/mini_llm_infra/generation/manual.py`)
+* [x] Separate Prefill and Decode timing — TTFT / TPOT / ITL / TOT
+* [x] KV Cache on/off comparison (`--use-cache` / `--no-use-cache`)
+* [x] Reusable model loader (`src/mini_llm_infra/model/loader.py`)
+* [x] Correctness test for autoregressive decoding (`tests/test_autoregressive.py`)
+* [ ] Temperature / Top-K / Top-P sampling (only Greedy currently)
+* [ ] Greedy output consistency validation against HF `generate()`
+* [ ] Archive reproducible Phase 1 measurements on the target GPU
+* [ ] First Prefill / Decode analysis report
 
 Current focus:
 
-* [ ] Run and archive reproducible baseline measurements on the target GPU
-* [ ] Review generated outputs and write the first benchmark analysis
-* [ ] Add correctness tests for configuration and metric helpers
-* [ ] Begin manual autoregressive decoding
-* [ ] Separate strict Prefill, TTFT, Decode, TPOT, and ITL measurements
+* [ ] Complete greedy-vs-HF consistency check (`compare_greedy_with_hf.py`)
+* [ ] Run and save reproducible Phase 1 measurements
+* [ ] Write the first Prefill / Decode analysis
+* [ ] Profile Phase 1 workloads with PyTorch Profiler
 
 ---
 

@@ -32,22 +32,39 @@
 
 ## 当前阶段
 
-项目当前处于 **Phase 0：可复现的 Hugging Face 推理基线**。
+项目当前处于 **Phase 1：手写自回归解码**（Phase 0 已完成）。
 
-已完成的基础设施包括：
+### Phase 0 — 已完成
 
 * [x] Python 3.12 + uv 项目环境
-* [x] CUDA 版 PyTorch、Transformers、Accelerate、Triton 与 pytest 依赖
+* [x] CUDA 13.0 版 PyTorch、Transformers、Accelerate、Triton、matplotlib 与 pytest 依赖
 * [x] 从本地加载 Qwen3-1.7B Tokenizer 和模型权重
 * [x] 导出模型结构与参数统计
 * [x] 单请求贪心生成
 * [x] 配置驱动的 `smoke`、`prefill`、`decode`、`mixed` 和 `full` 测试套件
 * [x] Warm-up 与 CUDA 同步计时
-* [x] 延迟、输出 tokens/s、平均 ms/token 和 GPU 显存峰值采集
+* [x] 延迟（mean/P50/P95）、输出 tokens/s、ms/token 和 GPU 显存峰值采集
 * [x] 环境信息、Tokenizer / 模型加载耗时记录
 * [x] JSON / TXT 结果保存与可选的 PyTorch Profiler 导出
 
-基准工具已经实现；下一步是固定目标 GPU 和实验配置，保存可复现的测量结果并完成第一份分析报告。在这些数据落盘并经过复核之前，本项目不会给出性能结论。
+### Phase 1 — 进行中
+
+* [x] 手写自回归解码循环（`src/mini_llm_infra/generation/manual.py` → `manual_generate()`）
+* [x] 严格拆分 Prefill 与 Decode —— TTFT / TPOT / ITL / TOT
+* [x] KV Cache 开/关对比（`--use-cache` / `--no-use-cache`）
+* [x] 可复用模型加载器（`src/mini_llm_infra/model/loader.py`）
+* [x] 手写解码正确性测试（`tests/test_autoregressive.py`）
+* [ ] Temperature / Top-K / Top-P 采样（当前仅 Greedy）
+* [ ] 与 HF `generate()` 逐 token 一致性验证（`compare_greedy_with_hf.py`）
+* [ ] 在目标 GPU 上保存可复现的 Phase 1 测量结果
+* [ ] 首份 Prefill / Decode 分析报告
+
+当前工作重点：
+
+* [ ] 完成 `compare_greedy_with_hf.py` 一致性对比
+* [ ] 运行并保存可复现的 Phase 1 数据
+* [ ] 撰写首份 Prefill / Decode 分析
+* [ ] 接入 PyTorch Profiler 对 Phase 1 工作负载进行 Profiling
 
 ---
 
@@ -91,12 +108,13 @@
 
 * Python 3.12
 * uv
-* PyTorch
+* PyTorch（CUDA 13.0）
 * Hugging Face Transformers / Hub
 * Accelerate
 * Triton
 * NVIDIA CUDA
 * NumPy
+* matplotlib
 * pytest
 
 后续阶段计划使用 PyTorch Profiler、Nsight Systems、Nsight Compute、HTTP 服务工具、vLLM 和 SGLang。
@@ -131,11 +149,32 @@ uv run python experiments/01_default_infer_baseline/benchmark_hf_generate.py \
 --model-path /path/to/Qwen3-1.7B
 ```
 
+运行 Phase 1 手写自回归解码 Smoke Test：
+
+```bash
+uv run python experiments/02_autoregressive_decoding/benchmark_manual_decode.py \
+  --suite smoke
+```
+
+对比开/关 KV Cache 时的 Decode 延迟：
+
+```bash
+# 开启 KV Cache（默认）
+uv run python experiments/02_autoregressive_decoding/benchmark_manual_decode.py \
+  --suite decode
+
+# 关闭 KV Cache ——每步重算完整历史，观察延迟变化
+uv run python experiments/02_autoregressive_decoding/benchmark_manual_decode.py \
+  --suite decode \
+  --no-use-cache
+```
+
 ### 实验文档
 
 * [首次加载、生成与模型结构导出](./experiments/00_first_load_and_infra/README.md)
 * [Hugging Face 原生生成基线](./experiments/01_default_infer_baseline/README-benchmark-hf-generate.md)
 * [Benchmark 工作负载配置说明](./experiments/01_default_infer_baseline/README-benchmark-config.md)
+* [手写自回归解码（Phase 1）](./experiments/02_autoregressive_decoding/README.md)
 
 ---
 
@@ -178,15 +217,15 @@ experiments/
 
 实现已覆盖模型加载、文本生成、固定随机种子、环境记录、加载耗时、GPU 显存、基础 Benchmark、生成结果保存和 Profiler 导出。
 
-### Phase 1 — Autoregressive Decoding
+### Phase 1 — Autoregressive Decoding（进行中）
 
-停止把 `model.generate()` 当作黑盒，手写自回归生成循环、Greedy / Temperature / Top-K / Top-P 采样，并严格区分 Prefill 与 Decode。
+手写 `manual_generate()` 自回归生成循环，以 TTFT 衡量 Prefill、以 TPOT/ITL 衡量 Decode。已实现 Greedy 解码、KV Cache 开/关对比、TTFT / TPOT / ITL / TOT 计时，以及手写解码正确性测试。Temperature / Top-K / Top-P 采样和与 HF `generate()` 的一致性验证尚未完成。
 
 重点指标：TTFT、TPOT、ITL 和端到端延迟。
 
-### Phase 2 — KV Cache
+### Phase 2 — KV Cache（部分实现）
 
-对比启用和关闭 KV Cache 时的计算量、延迟与显存，分析其随序列长度增长的规律，以及 MHA / GQA / MQA 对缓存布局的影响。
+已通过 `--use-cache` / `--no-use-cache` 实现 KV Cache 开/关对比，可测量两种模式的计算量、延迟与显存差异。KV Cache 随序列长度增长的规律分析、MHA / GQA / MQA 缓存布局对比尚未完成。
 
 ### Phase 3 — Profiling
 
@@ -244,17 +283,31 @@ mini-LLM-infra/
 │   └── .gitkeep
 ├── src/
 │   └── mini_llm_infra/
-│       └── __init__.py
+│       ├── __init__.py
+│       ├── generation/
+│       │   └── manual.py          # ManualGenerateConfig / GenerationMetrics / manual_generate()
+│       ├── model/
+│       │   └── loader.py          # load_tokenizer / load_causal_lm（支持 eager/sdpa）
+│       └── utils/
+│           ├── cuda.py            # configure_cuda_compatibility / select_dtype
+│           └── loadconfig.py      # 配置校验、套件与 Prompt 解析
+├── tests/
+│   └── test_autoregressive.py     # 手写解码正确性测试
 └── experiments/
     ├── 00_first_load_and_infra/
     │   ├── README.md
     │   ├── first-load.py
     │   └── qwen3-1.7b-structure.txt
-    └── 01_default_infer_baseline/
-        ├── README-benchmark-config.md
-        ├── README-benchmark-hf-generate.md
+    ├── 01_default_infer_baseline/
+    │   ├── README-benchmark-config.md
+    │   ├── README-benchmark-hf-generate.md
+    │   ├── benchmark_config.json
+    │   └── benchmark_hf_generate.py
+    └── 02_autoregressive_decoding/
+        ├── README.md
         ├── benchmark_config.json
-        └── benchmark_hf_generate.py
+        ├── benchmark_manual_decode.py   # 手写 Greedy 解码 + TTFT/TPOT/ITL/TOT
+        └── compare_greedy_with_hf.py    # （占位）与 HF generate() 的一致性对比
 ```
 
 运行基准后，`results/` 和 `profiles/` 会生成在对应实验目录中。随着可复用代码和正确性覆盖增加，再逐步引入顶层 `benchmarks/`、`tests/`、`docs/`、`profiles/` 和 `results/`。
@@ -285,11 +338,11 @@ mini-LLM-infra/
 
 ## 当前工作重点
 
-* [ ] 在目标 GPU 上运行并保存可复现的基线数据
-* [ ] 复核生成结果并撰写首份 Benchmark 分析
-* [ ] 为配置解析和指标计算添加正确性测试
-* [ ] 开始手写自回归 Decode Loop
-* [ ] 严格拆分 Prefill、TTFT、Decode、TPOT 与 ITL
+* [ ] 完成 `compare_greedy_with_hf.py` 与 HF `generate()` 的逐 token 一致性对比
+* [ ] 在目标 GPU 上运行并保存可复现的 Phase 1 测量数据
+* [ ] 撰写首份 Prefill / TTFT / Decode / TPOT / ITL 分析报告
+* [ ] 接入 PyTorch Profiler 对手写解码工作负载进行 Profiling
+* [ ] 实现 Temperature / Top-K / Top-P 采样
 
 ---
 
