@@ -342,7 +342,7 @@ mini-LLM-infra/
 * [ ] 在目标 GPU 上运行并保存可复现的 Phase 1 测量数据
 * [ ] 撰写首份 Prefill / TTFT / Decode / TPOT / ITL 分析报告
 * [ ] 接入 PyTorch Profiler 对手写解码工作负载进行 Profiling
-* [ ] 实现 Temperature / Top-K / Top-P 采样
+* [x] 实现 Temperature / Top-K / Top-P 采样
 
 ---
 

@@ -276,9 +276,9 @@ Tasks:
 * [x] Implement manual autoregressive decoding
 * [x] Understand logits generation
 * [x] Implement greedy decoding
-* [ ] Implement temperature sampling
-* [ ] Implement Top-K sampling
-* [ ] Implement Top-P sampling
+* [x] Implement temperature sampling
+* [x] Implement Top-K sampling
+* [x] Implement Top-P sampling
 * [x] Separate prefill and decode
 * [x] Measure prefill latency
 * [x] Measure decode latency
