@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import math
 import statistics
 import time
 from dataclasses import dataclass
+from functools import partial
 from typing import Literal, TypeAlias
 
 import torch
+
+from .sampling import greedy_sampling, top_k_sampling, top_p_sampling
 
 
 EosTokenId: TypeAlias = int | tuple[int, ...] | None
@@ -14,7 +18,7 @@ FinishReason: TypeAlias = Literal["eos", "length"]
 
 @dataclass(frozen=True, slots=True)
 class ManualGenerateConfig:
-    """手写 Greedy 解码所需的最小配置。"""
+    """手写逐 token 解码所需的最小配置。"""
 
     max_new_tokens: int
     eos_token_id: EosTokenId
@@ -129,18 +133,42 @@ def manual_generate(
     input_ids: torch.Tensor,
     attention_mask: torch.Tensor,
     config: ManualGenerateConfig,
+    mode: Literal["greedy", "top_k", "top_p"] = "greedy",
+    top_k: int | None = None,
+    top_p: float | None = None,
+    temperature: float = 1.0,
 ) -> ManualGenerationResult:
-    """用 Greedy 策略逐 token 推理，并记录 token-ready 延迟。
+    """用 greedy、top_k 或 top_p 策略逐 token 推理，记录 token-ready 延迟。
+
+    top_k 和 top_p 模式分别要求提供对应参数，并使用正的有限 temperature。
+    greedy 模式忽略采样参数。
 
     当 ``use_cache=False`` 时，每一步都会重新计算完整历史序列；开启缓存后，
     第一步处理完整 Prompt，后续步骤只把最新 token 和 ``past_key_values``
     传给模型。
 
-    计时从第一次模型调用前开始，在每个 token 的 argmax 结果可用后记录时间。
+    计时从第一次模型调用前开始，在每个 token 的采样结果可用后记录时间。
     CUDA 上会在计时起点和每个 token-ready 点同步，确保异步 kernel 已完成。
     """
 
     _validate_inputs(input_ids, attention_mask)
+
+    if mode not in ("greedy", "top_k", "top_p"):
+        raise ValueError("mode 必须是 greedy、top_k 或 top_p。")
+    if mode != "greedy" and (
+        not math.isfinite(temperature) or temperature <= 0
+    ):
+        raise ValueError("temperature 必须是大于 0 的有限数。")
+    if mode == "top_k":
+        if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+            raise ValueError("top_k 模式要求 top_k 为正整数。")
+        sample_next_token = partial(top_k_sampling, top_k=top_k, temperature=temperature)
+    elif mode == "top_p":
+        if top_p is None or not 0 < top_p <= 1:
+            raise ValueError("top_p 模式要求 0 < top_p <= 1。")
+        sample_next_token = partial(top_p_sampling, top_p=top_p, temperature=temperature)
+    else:
+        sample_next_token = greedy_sampling
 
     device = input_ids.device
     sequence_ids = input_ids.clone()
@@ -170,11 +198,7 @@ def manual_generate(
                 model_arguments["past_key_values"] = past_key_values
 
             outputs = model(**model_arguments)
-            next_token_id = torch.argmax(
-                outputs.logits[:, -1, :],
-                dim=-1,
-                keepdim=True,
-            )
+            next_token_id = sample_next_token(outputs.logits[:, -1, :])
 
             if config.use_cache:
                 past_key_values = getattr(outputs, "past_key_values", None)

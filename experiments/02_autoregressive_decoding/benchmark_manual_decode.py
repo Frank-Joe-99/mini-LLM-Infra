@@ -20,6 +20,7 @@ from mini_llm_infra.generation.manual import (
     ManualGenerationResult,
     manual_generate,
 )
+
 from mini_llm_infra.model.loader import load_causal_lm, load_tokenizer
 from mini_llm_infra.utils.cuda import configure_cuda_compatibility, select_dtype
 from mini_llm_infra.utils.loadconfig import (
