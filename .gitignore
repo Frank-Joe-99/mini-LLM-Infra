@@ -34,6 +34,7 @@ experiments/**/result/
 experiments/**/results/
 experiments/**/profile/
 experiments/**/profiles/
+experiments/**/*.onnx.data
 *.pt.trace.json
 *.pt.trace.json.gz
 *.stacks
